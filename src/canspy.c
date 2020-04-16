@@ -25,6 +25,7 @@
 #include "generated/led_red.h"
 #include "generated/led_green.h"
 #include "libcan.h"
+#include "libusart.h"
 
 
 /* Led state */
@@ -35,6 +36,8 @@ led_state_t green_state = OFF; /* Green is ON while a frame is processed */
 /* devices */
 device_t leds;
 int desc_leds;
+usart_config_t usart_config;
+usart_map_mode_t map_mode;
 can_context_t can1_ctx, can2_ctx;
 
 
@@ -74,12 +77,12 @@ void inc_mod (unsigned char *index) {
 }
 
 void buffer_can_frame(can_port_t port, can_fifo_t fifo) {
-  mbed_error_t cret;
+  mbed_error_t mret;
   switch (port) {
     case CAN_PORT_1:
-      cret = can_receive(&can1_ctx, fifo, &can1_rx_buffer[can1_rx_in].head,
+      mret = can_receive(&can1_ctx, fifo, &can1_rx_buffer[can1_rx_in].head,
                                           &can1_rx_buffer[can1_rx_in].body);
-      if (cret == CAN_ERROR_NONE) {
+      if (mret == CAN_ERROR_NONE) {
         inc_mod(&can1_rx_in);
         if (can1_rx_in == can1_rx_out) {
           // Oups the buffer is full ! We drop one entry.
@@ -88,9 +91,9 @@ void buffer_can_frame(can_port_t port, can_fifo_t fifo) {
       }
       break;
     case CAN_PORT_2:
-      cret = can_receive(&can2_ctx, fifo, &can2_rx_buffer[can2_rx_in].head,
+      mret = can_receive(&can2_ctx, fifo, &can2_rx_buffer[can2_rx_in].head,
                                           &can2_rx_buffer[can2_rx_in].body);
-      if (cret == CAN_ERROR_NONE) {
+      if (mret == CAN_ERROR_NONE) {
         inc_mod(&can2_rx_in);
         if (can2_rx_in == can2_rx_out) {
           inc_mod(&can2_rx_out);
@@ -234,13 +237,13 @@ int _main(uint32_t my_id)
 {
     uint8_t         id, id_button;
     logsize_t       msg_size;
-    e_syscall_ret   ret;
+    e_syscall_ret   sret;
 
     printf("Hello, I'm the CANSPY task. My id is %x\n", my_id);
 
     /* Get the button task id to be able to communicate with it using IPCs */
-    ret = sys_init(INIT_GETTASKID, "BUTTON", &id_button);
-    if (ret != SYS_E_DONE) {
+    sret = sys_init(INIT_GETTASKID, "BUTTON", &id_button);
+    if (sret != SYS_E_DONE) {
         printf("Task BUTTON not present. Exiting.\n");
         return 1;
     }
@@ -281,11 +284,44 @@ int _main(uint32_t my_id)
     leds.gpios[1].type      = GPIO_PIN_OTYPER_PP;
     leds.gpios[1].speed     = GPIO_PIN_HIGH_SPEED;
 
-    ret = sys_init(INIT_DEVACCESS, &leds, &desc_leds);
-    if (ret) {
-        printf("Error: sys_init(leds) %s\n", strerror(ret));
+    sret = sys_init(INIT_DEVACCESS, &leds, &desc_leds);
+    if (sret) {
+        printf("Error: sys_init(leds) %s\n", strerror(sret));
     } else {
         printf("sys_init(leds) - success\n");
+    }
+
+    /*
+     * Configuring the USART to emit the frames in ASCII toward an slcand
+     */
+    memset(&usart_config, 0, sizeof(usart_config_t));
+
+    /* for sys init (or "early init") */
+    /* getc and putc handler in config are set by thE USART driver */
+    usart_config.usart = 2, /* in case one is reserved for printf */
+    usart_config.mode = UART;
+    static cb_usart_getc_t getc_ptr = NULL;
+    static cb_usart_putc_t putc_ptr = NULL;
+    usart_config.callback_usart_getc_ptr = &getc_ptr;
+    usart_config.callback_usart_putc_ptr = &putc_ptr;
+
+    /* for start (or "init") */
+    usart_config.set_mask = USART_SET_ALL;
+    usart_config.baudrate = 115200; // bit/s
+    usart_config.word_length = USART_CR1_M_8;
+    usart_config.parity = USART_CR1_PCE_DIS;
+    usart_config.stop_bits = USART_CR2_STOP_1BIT;
+    usart_config.hw_flow_control = USART_CR3_CTSE_CTS_DIS | USART_CR3_RTSE_RTS_DIS;
+    usart_config.options_cr1 = USART_CR1_TE_EN | USART_CR1_RE_EN
+                               | USART_CR1_RXNEIE_EN;
+    usart_config.options_cr2 = 0;
+    usart_config.callback_irq_handler = NULL;
+
+    sret = usart_early_init(&usart_config, USART_MAP_AUTO);
+    if (sret) {
+        printf("Error: sys_init(USART) %s\n", strerror(sret));
+    } else {
+        printf("sys_init(USART) - success\n");
     }
 
 
@@ -293,7 +329,7 @@ int _main(uint32_t my_id)
      * Configuring the two Controller Area Network (CAN) peripherals.
      */
 
-     mbed_error_t cret;
+     mbed_error_t mret;
 
      /* Zeroing the structure to avoid improper values detected by the kernel */
      memset(&can1_ctx, 0, sizeof(can_context_t));
@@ -326,12 +362,12 @@ int _main(uint32_t my_id)
 
      for (int i = 1; i < 3; i++) {
        if (i == 1) {
-          cret = can_declare(&can1_ctx);
+          mret = can_declare(&can1_ctx);
        } else {
-          cret = can_declare(&can2_ctx);
+          mret = can_declare(&can2_ctx);
        }
-       if (cret) {
-           printf("Error: sys_init(CAN%d) %d\n", i, cret);
+       if (mret) {
+           printf("Error: sys_init(CAN%d) %d\n", i, mret);
        } else {
            printf("sys_init(CAN%d) - success\n",i);
        }
@@ -341,9 +377,9 @@ int _main(uint32_t my_id)
      * Devices and ressources registration is finished !
      */
 
-    ret = sys_init(INIT_DONE);
-    if (ret) {
-        printf("Error sys_init DONE: %s\n", strerror(ret));
+    sret = sys_init(INIT_DONE);
+    if (sret) {
+        printf("Error sys_init DONE: %s\n", strerror(sret));
         return 1;
     }
     printf("init done.\n");
@@ -354,12 +390,12 @@ int _main(uint32_t my_id)
 
     for (int i = 1; i < 3; i++) {
        if (i == 1) {
-          cret = can_initialize(&can1_ctx);
+          mret = can_initialize(&can1_ctx);
        } else {
-          cret = can_initialize(&can2_ctx);
+          mret = can_initialize(&can2_ctx);
        }
-       if (cret) {
-          printf("Error during CAN%d initialization %d\n", i, cret);
+       if (mret) {
+          printf("Error during CAN%d initialization %d\n", i, mret);
        } else {
           printf("CAN%d initialized with success\n",i);
        }
@@ -367,15 +403,22 @@ int _main(uint32_t my_id)
 
     for (int i = 1; i < 3; i++) {
        if (i == 1) {
-          cret = can_start(&can1_ctx);
+          mret = can_start(&can1_ctx);
        } else {
-          cret = can_start(&can2_ctx);
+          mret = can_start(&can2_ctx);
        }
-       if (cret) {
-          printf("Error during CAN%d start %d\n", i, cret);
+       if (mret) {
+          printf("Error during CAN%d start %d\n", i, mret);
        } else {
           printf("CAN%d started with success\n",i);
        }
+    }
+
+    sret = usart_init(&usart_config);
+    if (sret) {
+      printf("Error during USART initialization %d\n", sret);
+    } else {
+      printf("USART initialized with success\n");
     }
 
 
@@ -388,9 +431,9 @@ int _main(uint32_t my_id)
         id = id_button;
         msg_size = sizeof(button_pressed);
 
-        ret = sys_ipc(IPC_RECV_ASYNC, &id, &msg_size, (char*) &button_pressed);
+        sret = sys_ipc(IPC_RECV_ASYNC, &id, &msg_size, (char*) &button_pressed);
 
-        switch (ret) {
+        switch (sret) {
             case SYS_E_DONE:
                 if (button_pressed == true) {
                   if (verbose == false) {
@@ -400,8 +443,8 @@ int _main(uint32_t my_id)
                     verbose = false;
                     red_state = OFF;
                   }
-                  ret = sys_cfg(CFG_GPIO_SET, (uint8_t) leds.gpios[0].kref.val, red_state);
-                  if (ret != SYS_E_DONE) {
+                  sret = sys_cfg(CFG_GPIO_SET, (uint8_t) leds.gpios[0].kref.val, red_state);
+                  if (sret != SYS_E_DONE) {
                       printf("sys_cfg(red led): failed\n");
                       return 1;
                   }
@@ -435,34 +478,65 @@ int _main(uint32_t my_id)
 
             /* signal traffic */
             green_state = ON;
-            ret = sys_cfg(CFG_GPIO_SET, (uint8_t) leds.gpios[1].kref.val, green_state);
-            if (ret != SYS_E_DONE) {
+            sret = sys_cfg(CFG_GPIO_SET, (uint8_t) leds.gpios[1].kref.val, green_state);
+            if (sret != SYS_E_DONE) {
                printf("sys_cfg(green led): failed\n");
               return 1;
             }
 
-            /* 1. Mirror it to the serial port. */
+            /* 1. Mirror it to the serial port using the Serial Line CAN
+                  interface (SLCAN) driver syntax. */
             if (verbose) {
+              /* DEBUG ONLY */
               printf("CAN%d received (IT %d, FIFO %d):\n", port, nb_IT, fifo);
               dump_CAN_frame (&head, &body);
+
+              char buffer[10+8*2+5];
+              int n = 0;
+
+              // 1. ID in decimal
+              if (head.IDE == CAN_ID_STD) {
+                if (head.RTR) {
+                   n = sprintf(buffer, "r%03i", head.id.std);
+                } else {
+                   n = sprintf(buffer, "t%03i", head.id.std);
+                }
+              } else {
+                if (head.RTR) {
+                   n = sprintf(buffer, "R%08i", head.id.std);
+                } else {
+                   n = sprintf(buffer, "T%08i", head.id.std);
+                }
+              }
+
+              // 2. length
+              n = n + sprintf(buffer+n, "%01d", head.DLC);
+
+              // 3. raw data in hexa
+              for (int i = 0; i < head.DLC; i++) {
+                n = n + sprintf(buffer+n, "%02x", body.data[i]);
+              }
+              n = n + sprintf(buffer+n, "\r");
+
+              usart_write(usart_config.usart, &buffer, n);
             }
 
-            /* 2. Forward it to the other CAN */
+            /* 2. Forward it to the other CAN bus */
             can_mbox_t *mbox = NULL;
             if (port == CAN_PORT_1) {
-              cret = can_xmit(&can2_ctx, &head, &body, mbox);
+              mret = can_xmit(&can2_ctx, &head, &body, mbox);
             } else {
-              cret = can_xmit(&can1_ctx, &head, &body, mbox);
+              mret = can_xmit(&can1_ctx, &head, &body, mbox);
             }
-            if (cret) {
-              printf("Error: CAN%d Xmit %d\n", port, cret);
+            if (mret) {
+              printf("Error: CAN%d Xmit %d\n", port, mret);
             }
           }
         }
 
       green_state = OFF;
-      ret = sys_cfg(CFG_GPIO_SET, (uint8_t) leds.gpios[1].kref.val, green_state);
-      if (ret != SYS_E_DONE) {
+      sret = sys_cfg(CFG_GPIO_SET, (uint8_t) leds.gpios[1].kref.val, green_state);
+      if (sret != SYS_E_DONE) {
           printf("sys_cfg(green led): failed\n");
           return 1;
       }
