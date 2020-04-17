@@ -497,15 +497,15 @@ int _main(uint32_t my_id)
               // 1. ID in decimal
               if (head.IDE == CAN_ID_STD) {
                 if (head.RTR) {
-                   n = sprintf(buffer, "r%03i", head.id.std);
+                   n = sprintf(buffer, "r%03x", head.id.std);
                 } else {
-                   n = sprintf(buffer, "t%03i", head.id.std);
+                   n = sprintf(buffer, "t%03x", head.id.std);
                 }
               } else {
                 if (head.RTR) {
-                   n = sprintf(buffer, "R%08i", head.id.std);
+                   n = sprintf(buffer, "R%08x", head.id.std);
                 } else {
-                   n = sprintf(buffer, "T%08i", head.id.std);
+                   n = sprintf(buffer, "T%08x", head.id.std);
                 }
               }
 
@@ -518,7 +518,7 @@ int _main(uint32_t my_id)
               }
               n = n + sprintf(buffer+n, "\r");
 
-              usart_write(usart_config.usart, &buffer, n);
+              usart_write(usart_config.usart, buffer, n);
             }
 
             /* 2. Forward it to the other CAN bus */
