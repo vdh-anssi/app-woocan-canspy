@@ -22,20 +22,16 @@
 #include "libc/stdio.h"
 #include "libc/string.h"
 
+#include "generated/button.h"
 #include "generated/led_red.h"
 #include "generated/led_green.h"
 #include "libcan.h"
 #include "libusart.h"
 
 
-/* Led state */
-typedef enum {OFF = 0, ON = 1} led_state_t;
-led_state_t red_state   = OFF; /* Red   is ON iff in verbose mode */
-led_state_t green_state = OFF; /* Green is ON while a frame is processed */
-
 /* devices */
-device_t leds;
-int desc_leds;
+device_t button, leds;
+int desc_button, desc_leds;
 usart_config_t usart_config;
 usart_map_mode_t map_mode;
 can_context_t can1_ctx, can2_ctx;
@@ -137,11 +133,31 @@ bool retrieve_available_can_frame(can_port_t port,
 }
 
 
-/* status */
-bool button_pressed = false;       /* set via IPC */
-bool verbose        = false;       /* set via IPC */
+/*
+ * Interruption Routine (ISR) used for the button
+ */
+volatile bool button_pressed = false;       /* set by ISR */
 
+void exti_button_handler ()
+{
+   uint64_t        clock;
+   static uint64_t last_isr_clk;
+   e_syscall_ret   sret;
 
+   /* get the time elapsed since boot */
+   sret = sys_get_systick(&clock, PREC_MILLI);
+   if (sret == SYS_E_DONE) {
+       /* debouncing ... */
+       if (clock - last_isr_clk > 20) {
+          last_isr_clk = clock;
+          button_pressed = true;
+       }
+   }
+}
+
+/*
+ * Interruption Routine : this is called by the CAN ISR routine
+ */
 volatile can_port_t port_id  = CAN_PORT_1;  /* set by ISR */
 volatile can_event_t last_event;            /* set by ISR */
 volatile can_error_t can_error_nb;          /* set by ISR */
@@ -149,16 +165,7 @@ volatile uint32_t nb_IT      = 0;           /* set by ISR */
 volatile bool emit_aborted   = false;       /* set by ISR */
 volatile bool error_occurred = false;       /* set by ISR */
 volatile can_fifo_t fifo     = CAN_FIFO_0;  /* set by ISR */
-
-can_header_t head;
-can_data_t body;
-
-
-/*
- * Interruption Routine : this is called by the CAN ISR routine
- */
-
-static volatile uint32_t events[13] = { 0 };
+volatile uint32_t events[13] = { 0 };       /* set by ISR */
 
 mbed_error_t can_event(can_event_t event, can_port_t port, can_error_t errcode)
 {
@@ -235,22 +242,37 @@ void dump_CAN_frame (can_header_t *head, can_data_t *body)
 
 int _main(uint32_t my_id)
 {
-    uint8_t         id, id_button;
-    logsize_t       msg_size;
     e_syscall_ret   sret;
 
     printf("Hello, I'm the CANSPY task. My id is %x\n", my_id);
 
-    /* Get the button task id to be able to communicate with it using IPCs */
-    sret = sys_init(INIT_GETTASKID, "BUTTON", &id_button);
-    if (sret != SYS_E_DONE) {
-        printf("Task BUTTON not present. Exiting.\n");
-        return 1;
-    }
+    /* Configuring the button GPIOs
+     * See sample button app for details */
 
     /* Zeroing the structure to avoid improper values detected by the kernel */
-    memset(&leds, 0, sizeof(leds));
-    strncpy(leds.name, "LEDs", sizeof(leds.name));
+    memset(&button, 0, sizeof(button));
+    strncpy(button.name, "BUTTON", sizeof(button.name));
+
+    button.gpio_num = 1;    /* Number of configured GPIO */
+
+    button.gpios[0].kref.port = button_dev_infos.gpios[BUTTON].port;
+    button.gpios[0].kref.pin  = button_dev_infos.gpios[BUTTON].pin;
+    button.gpios[0].mask      = GPIO_MASK_SET_MODE | GPIO_MASK_SET_PUPD |
+                                GPIO_MASK_SET_TYPE | GPIO_MASK_SET_SPEED|
+                                GPIO_MASK_SET_EXTI;
+    button.gpios[0].mode      = GPIO_PIN_INPUT_MODE;
+    button.gpios[0].pupd      = GPIO_PULLDOWN;
+    button.gpios[0].type      = GPIO_PIN_OTYPER_PP;
+    button.gpios[0].speed     = GPIO_PIN_LOW_SPEED;
+    button.gpios[0].exti_trigger = GPIO_EXTI_TRIGGER_RISE;
+    button.gpios[0].exti_handler = (user_handler_t) exti_button_handler;
+
+    sret = sys_init(INIT_DEVACCESS, &button, &desc_button);
+    if (sret) {
+        printf("Error: sys_init(button) %s\n", strerror(sret));
+    } else {
+        printf("sys_init(button) - success\n");
+    }
 
     /*
      * Configuring the LED GPIOs. Note: the related clocks are automatically set
@@ -262,9 +284,10 @@ int _main(uint32_t my_id)
      * NOTE: since we do not need an ISR handler for the LED gpios, we do not
      * configure it (we only need to synchronously set the LEDs)
      */
+    memset(&leds, 0, sizeof(leds));
+    strncpy(leds.name, "LEDs", sizeof(leds.name));
 
-    /* Number of configured GPIO */
-    leds.gpio_num = 2;
+    leds.gpio_num = 2;    /* Number of configured GPIO */
 
     leds.gpios[0].kref.port = led_red_dev_infos.gpios[LED_RED].port;
     leds.gpios[0].kref.pin  = led_red_dev_infos.gpios[LED_RED].pin;
@@ -426,41 +449,35 @@ int _main(uint32_t my_id)
          * Main task *
          *************/
 
+    bool verbose  = false;       /* Shall we report frames to the SLCAN ? */
+
+    /* Led state */
+    typedef enum {OFF = 0, ON = 1} led_state_t;
+    led_state_t red_state   = OFF; /* Red   is ON iff in verbose mode */
+    led_state_t green_state = OFF; /* Green is ON while a frame is processed */
+
+    can_header_t head;
+    can_data_t body;
+
     while (1) {
 
-        id = id_button;
-        msg_size = sizeof(button_pressed);
-
-        sret = sys_ipc(IPC_RECV_ASYNC, &id, &msg_size, (char*) &button_pressed);
-
-        switch (sret) {
-            case SYS_E_DONE:
-                if (button_pressed == true) {
-                  if (verbose == false) {
-                    verbose = true;
-                    red_state = ON;
-                  } else {
-                    verbose = false;
-                    red_state = OFF;
-                  }
-                  sret = sys_cfg(CFG_GPIO_SET, (uint8_t) leds.gpios[0].kref.val, red_state);
-                  if (sret != SYS_E_DONE) {
-                      printf("sys_cfg(red led): failed\n");
-                      return 1;
-                  }
-                }
-                break;
-
-            case SYS_E_BUSY:
-                break;
-            case SYS_E_DENIED:
-            case SYS_E_INVAL:
-            default:
-                printf("sys_ipc(): error. Exiting.\n");
+        /* Manage button for verbose mode */
+        if (button_pressed == true) {
+            if (verbose == false) {
+                verbose = true;
+                red_state = ON;
+            } else {
+                verbose = false;
+                red_state = OFF;
+            }
+            sret = sys_cfg(CFG_GPIO_SET, (uint8_t) leds.gpios[0].kref.val, red_state);
+            if (sret != SYS_E_DONE) {
+                printf("sys_cfg(red led): failed\n");
                 return 1;
+            }
         }
 
-        /* if there is an error, signal it */
+        /* if there is an error on the CAN bus, signal it */
         if (emit_aborted) {
            emit_aborted = false;
            verbose = false;
