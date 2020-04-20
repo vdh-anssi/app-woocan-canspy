@@ -72,8 +72,9 @@ void inc_mod (unsigned char *index) {
   }
 }
 
-void buffer_can_frame(can_port_t port, can_fifo_t fifo) {
-  mbed_error_t mret;
+mbed_error_t buffer_can_frame(can_port_t port, can_fifo_t fifo) {
+  mbed_error_t errcode = MBED_ERROR_NONE;
+  can_error_t  mret;
   switch (port) {
     case CAN_PORT_1:
       mret = can_receive(&can1_ctx, fifo, &can1_rx_buffer[can1_rx_in].head,
@@ -83,7 +84,10 @@ void buffer_can_frame(can_port_t port, can_fifo_t fifo) {
         if (can1_rx_in == can1_rx_out) {
           // Oups the buffer is full ! We drop one entry.
           inc_mod(&can1_rx_out);
+          errcode = MBED_ERROR_NOSTORAGE;
         }
+      } else {
+        errcode = MBED_ERROR_RDERROR;
       }
       break;
     case CAN_PORT_2:
@@ -93,12 +97,16 @@ void buffer_can_frame(can_port_t port, can_fifo_t fifo) {
         inc_mod(&can2_rx_in);
         if (can2_rx_in == can2_rx_out) {
           inc_mod(&can2_rx_out);
+          errcode = MBED_ERROR_NOSTORAGE;
         }
+      } else {
+        errcode = MBED_ERROR_RDERROR;
       }
       break;
     case CAN_PORT_3:
       break;
   }
+    return errcode;
 }
 
 /* If there is a new CAN frame available in the buffer on port "port"
@@ -160,14 +168,15 @@ void exti_button_handler ()
  */
 volatile can_port_t port_id  = CAN_PORT_1;  /* set by ISR */
 volatile can_event_t last_event;            /* set by ISR */
-volatile can_error_t can_error_nb;          /* set by ISR */
+volatile can_error_t can_error_code;        /* set by ISR */
 volatile uint32_t nb_IT      = 0;           /* set by ISR */
 volatile bool emit_aborted   = false;       /* set by ISR */
 volatile bool error_occurred = false;       /* set by ISR */
+volatile bool lost_frame     = false;       /* set by ISR */
 volatile can_fifo_t fifo     = CAN_FIFO_0;  /* set by ISR */
 volatile uint32_t events[13] = { 0 };       /* set by ISR */
 
-mbed_error_t can_event(can_event_t event, can_port_t port, can_error_t errcode)
+void can_event(can_event_t event, can_port_t port, can_error_t errcode)
 {
     last_event = event;
     port_id    = port;
@@ -177,37 +186,41 @@ mbed_error_t can_event(can_event_t event, can_port_t port, can_error_t errcode)
    emit_aborted   = false;
    error_occurred = false;
 
+   mbed_error_t err  = MBED_ERROR_NONE;
+
     switch (event) {
       case CAN_EVENT_RX_FIFO0_MSG_PENDING:
-          buffer_can_frame(port, CAN_FIFO_0);
+          err = buffer_can_frame(port, CAN_FIFO_0);
           break;
       case CAN_EVENT_RX_FIFO0_FULL:
           buffer_can_frame(port, CAN_FIFO_0);
           buffer_can_frame(port, CAN_FIFO_0);
-          buffer_can_frame(port, CAN_FIFO_0);
+          err = buffer_can_frame(port, CAN_FIFO_0);
           break;
       case CAN_EVENT_RX_FIFO1_MSG_PENDING:
-          buffer_can_frame(port, CAN_FIFO_1);
+          err = buffer_can_frame(port, CAN_FIFO_1);
           break;
       case CAN_EVENT_RX_FIFO1_FULL:
           buffer_can_frame(port, CAN_FIFO_1);
           buffer_can_frame(port, CAN_FIFO_1);
-          buffer_can_frame(port, CAN_FIFO_1);
+          err = buffer_can_frame(port, CAN_FIFO_1);
           break;
       case CAN_EVENT_TX_MBOX0_ABORT:
       case CAN_EVENT_TX_MBOX1_ABORT:
       case CAN_EVENT_TX_MBOX2_ABORT:
           emit_aborted = true;
-          can_error_nb = errcode;
+          can_error_code = errcode;
           break;
       case CAN_EVENT_ERROR:
           error_occurred = true;
-          can_error_nb = errcode;
+          can_error_code = errcode;
           break;
       default:
           break;
     }
-   return MBED_ERROR_NONE;
+    if (err == MBED_ERROR_NOSTORAGE) {
+      lost_frame = true;
+    }
 }
 
 
@@ -368,7 +381,7 @@ int _main(uint32_t my_id)
      can1_ctx.autobusoff   = false;    /* automatic bus-off ? */
      can1_ctx.autowakeup   = true;     /* wake up from sleep on event ? */
      can1_ctx.autoretrans  = true;     /* auto retransmission ? */
-     can1_ctx.rxfifolocked = false;    /* lock Rx Fifo locked against overrun ?*/
+     can1_ctx.rxfifolocked = false;    /* is Rx Fifo locked against overrun ?*/
      can1_ctx.txfifoprio   = true;     /* Tx FIFO respects chronology ? */
      can1_ctx.bit_rate     = CAN_SPEED_1MHZ;
 
@@ -379,7 +392,7 @@ int _main(uint32_t my_id)
      can2_ctx.autobusoff   = false;    /* automatic bus-off ? */
      can2_ctx.autowakeup   = true;     /* wake up from sleep on event ? */
      can2_ctx.autoretrans  = true;     /* auto retransmission ? */
-     can2_ctx.rxfifolocked = false;    /* lock Rx Fifo locked against overrun ?*/
+     can2_ctx.rxfifolocked = false;    /* is Rx Fifo locked against overrun ?*/
      can2_ctx.txfifoprio   = true;     /* Tx FIFO respects chronology ? */
      can2_ctx.bit_rate     = CAN_SPEED_1MHZ;
 
@@ -479,14 +492,20 @@ int _main(uint32_t my_id)
 
         /* if there is an error on the CAN bus, signal it */
         if (emit_aborted) {
-           emit_aborted = false;
-           verbose = false;
-           printf("CAN event, emit aborted: %d ! \n", can_error_nb);
+          emit_aborted = false;
+          verbose = false;
+          printf("CAN event, emit aborted: %d ! \n", can_error_code);
         } else
         if (error_occurred) {
           error_occurred = false;
           verbose = false;
-          printf("CAN event, error: %d\n", can_error_nb);
+          printf("CAN event, error: %d\n", can_error_code);
+        }
+
+        /* If frames where lost in buffering, signal it */
+        if (lost_frame) {
+          lost_frame = false;
+          printf("At least one frame was lost due to CANSPY's buffer overrun\n");
         }
 
         /* if there is a frame to collect, let's do it */
