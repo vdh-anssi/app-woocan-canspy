@@ -246,7 +246,7 @@ void dump_CAN_frame (can_header_t *head, can_data_t *body)
   for (int i = 0; i < head->DLC; i++) {
     n = n + sprintf(buffer+n, " %02x", body->data[i]);
   }
-  printf("%s\n",buffer);
+  printf("%s\n", buffer);
 }
 
 /*******************************************************************************
@@ -523,14 +523,11 @@ int _main(uint32_t my_id)
             /* 1. Mirror it to the serial port using the Serial Line CAN
                   interface (SLCAN) driver syntax. */
             if (verbose) {
-              /* DEBUG ONLY */
-              printf("CAN%d received (IT %d, FIFO %d):\n", port, nb_IT, fifo);
-              dump_CAN_frame (&head, &body);
 
               char buffer[10+8*2+5];
               int n = 0;
 
-              // 1. ID in decimal
+              // a. ID in decimal
               if (head.IDE == CAN_ID_STD) {
                 if (head.RTR) {
                    n = sprintf(buffer, "r%03x", head.id.std);
@@ -545,10 +542,10 @@ int _main(uint32_t my_id)
                 }
               }
 
-              // 2. length
+              // b. length
               n = n + sprintf(buffer+n, "%01d", head.DLC);
 
-              // 3. raw data in hexa
+              // c. raw data in hexa
               for (int i = 0; i < head.DLC; i++) {
                 n = n + sprintf(buffer+n, "%02x", body.data[i]);
               }
