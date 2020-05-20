@@ -10,10 +10,9 @@
  * network and a targeted ECU or as a gateway between two CAN networks.
  *
  * It provides the following services :
- *   + forwarding CAN frames between CAN1 and CAN2 in both directions.
- *   + filtering CAN frames
- *   + mirroring CAN frames on a serial BUS
- *   + injecting CAN frames received by the serial BUS
+ *   + forward CAN frames between CAN1 and CAN2 in both directions.
+ *   + filter CAN frames
+ *   + mirror CAN frames on IPC as text messages following SLCAN format.
  *
  */
 
@@ -26,14 +25,11 @@
 #include "generated/led_red.h"
 #include "generated/led_green.h"
 #include "libcan.h"
-#include "libusart.h"
 
 
 /* devices */
 device_t button, leds;
 int desc_button, desc_leds;
-usart_config_t usart_config;
-usart_map_mode_t map_mode;
 can_context_t can1_ctx, can2_ctx;
 
 
@@ -264,7 +260,7 @@ int _main(uint32_t my_id)
 
     /* Zeroing the structure to avoid improper values detected by the kernel */
     memset(&button, 0, sizeof(button));
-    strncpy(button.name, "BUTTON", sizeof(button.name));
+    strcpy(button.name, "BUTTON");
 
     button.gpio_num = 1;    /* Number of configured GPIO */
 
@@ -298,7 +294,7 @@ int _main(uint32_t my_id)
      * configure it (we only need to synchronously set the LEDs)
      */
     memset(&leds, 0, sizeof(leds));
-    strncpy(leds.name, "LEDs", sizeof(leds.name));
+    strcpy(leds.name, "LEDs");
 
     leds.gpio_num = 2;    /* Number of configured GPIO */
 
@@ -327,76 +323,42 @@ int _main(uint32_t my_id)
         printf("sys_init(leds) - success\n");
     }
 
-    /*
-     * Configuring the USART to emit the frames in ASCII toward an slcand
-     */
-    memset(&usart_config, 0, sizeof(usart_config_t));
 
-    /* for sys init (or "early init") */
-    /* getc and putc handler in config are set by thE USART driver */
-    usart_config.usart = 2, /* in case one is reserved for printf */
-    usart_config.mode = UART;
-    static cb_usart_getc_t getc_ptr = NULL;
-    static cb_usart_putc_t putc_ptr = NULL;
-    usart_config.callback_usart_getc_ptr = &getc_ptr;
-    usart_config.callback_usart_putc_ptr = &putc_ptr;
+   /*
+    * Configuring the two Controller Area Network (CAN) peripherals.
+    */
 
-    /* for start (or "init") */
-    usart_config.set_mask = USART_SET_ALL;
-    usart_config.baudrate = 115200; // bit/s
-    usart_config.word_length = USART_CR1_M_8;
-    usart_config.parity = USART_CR1_PCE_DIS;
-    usart_config.stop_bits = USART_CR2_STOP_1BIT;
-    usart_config.hw_flow_control = USART_CR3_CTSE_CTS_DIS | USART_CR3_RTSE_RTS_DIS;
-    usart_config.options_cr1 = USART_CR1_TE_EN | USART_CR1_RE_EN
-                               | USART_CR1_RXNEIE_EN;
-    usart_config.options_cr2 = 0;
-    usart_config.callback_irq_handler = NULL;
+    mbed_error_t mret;
 
-    sret = usart_early_init(&usart_config, USART_MAP_AUTO);
-    if (sret) {
-        printf("Error: sys_init(USART) %s\n", strerror(sret));
-    } else {
-        printf("sys_init(USART) - success\n");
-    }
+    /* Zeroing the structure to avoid improper values detected by the kernel */
+    memset(&can1_ctx, 0, sizeof(can_context_t));
+    memset(&can2_ctx, 0, sizeof(can_context_t));
+    can1_ctx.id = CAN_PORT_1;
+    can2_ctx.id = CAN_PORT_2;
 
+    /* CAN 1 */
+    can1_ctx.mode = CAN_MODE_NORMAL;
+    can1_ctx.access = CAN_ACCESS_IT;
+    can1_ctx.timetrigger  = false;    /* Time triggered communication mode */
+    can1_ctx.autobusoff   = false;    /* automatic bus-off ? */
+    can1_ctx.autowakeup   = true;     /* wake up from sleep on event ? */
+    can1_ctx.autoretrans  = true;     /* auto retransmission ? */
+    can1_ctx.rxfifolocked = false;    /* is Rx Fifo locked against overrun ?*/
+    can1_ctx.txfifoprio   = true;     /* Tx FIFO respects chronology ? */
+    can1_ctx.bit_rate     = CAN_SPEED_1MHZ;
 
-    /*
-     * Configuring the two Controller Area Network (CAN) peripherals.
-     */
+    /* CAN 2 */
+    can2_ctx.mode = CAN_MODE_NORMAL;
+    can2_ctx.access = CAN_ACCESS_IT;
+    can2_ctx.timetrigger  = false;    /* Time triggered communication mode */
+    can2_ctx.autobusoff   = false;    /* automatic bus-off ? */
+    can2_ctx.autowakeup   = true;     /* wake up from sleep on event ? */
+    can2_ctx.autoretrans  = true;     /* auto retransmission ? */
+    can2_ctx.rxfifolocked = false;    /* is Rx Fifo locked against overrun ?*/
+    can2_ctx.txfifoprio   = true;     /* Tx FIFO respects chronology ? */
+    can2_ctx.bit_rate     = CAN_SPEED_1MHZ;
 
-     mbed_error_t mret;
-
-     /* Zeroing the structure to avoid improper values detected by the kernel */
-     memset(&can1_ctx, 0, sizeof(can_context_t));
-     memset(&can2_ctx, 0, sizeof(can_context_t));
-     can1_ctx.id = CAN_PORT_1;
-     can2_ctx.id = CAN_PORT_2;
-
-
-     /* CAN 1 */
-     can1_ctx.mode = CAN_MODE_NORMAL;
-     can1_ctx.access = CAN_ACCESS_IT;
-     can1_ctx.timetrigger  = false;    /* Time triggered communication mode */
-     can1_ctx.autobusoff   = false;    /* automatic bus-off ? */
-     can1_ctx.autowakeup   = true;     /* wake up from sleep on event ? */
-     can1_ctx.autoretrans  = true;     /* auto retransmission ? */
-     can1_ctx.rxfifolocked = false;    /* is Rx Fifo locked against overrun ?*/
-     can1_ctx.txfifoprio   = true;     /* Tx FIFO respects chronology ? */
-     can1_ctx.bit_rate     = CAN_SPEED_1MHZ;
-
-     /* CAN 2 */
-     can2_ctx.mode = CAN_MODE_NORMAL;
-     can2_ctx.access = CAN_ACCESS_IT;
-     can2_ctx.timetrigger  = false;    /* Time triggered communication mode */
-     can2_ctx.autobusoff   = false;    /* automatic bus-off ? */
-     can2_ctx.autowakeup   = true;     /* wake up from sleep on event ? */
-     can2_ctx.autoretrans  = true;     /* auto retransmission ? */
-     can2_ctx.rxfifolocked = false;    /* is Rx Fifo locked against overrun ?*/
-     can2_ctx.txfifoprio   = true;     /* Tx FIFO respects chronology ? */
-     can2_ctx.bit_rate     = CAN_SPEED_1MHZ;
-
-     for (int i = 1; i < 3; i++) {
+    for (int i = 1; i < 3; i++) {
        if (i == 1) {
           mret = can_declare(&can1_ctx);
        } else {
@@ -407,11 +369,25 @@ int _main(uint32_t my_id)
        } else {
            printf("sys_init(CAN%d) - success\n",i);
        }
-     }
+    }
 
-    /*
-     * Devices and ressources registration is finished !
-     */
+   /*
+    * Configuring the communication link to another task managing the USART,
+    * used to emit the frames in ASCII towards an slcand
+    */
+    uint8_t snif_id;
+    sret = sys_init(INIT_GETTASKID, "CANSNIF", &snif_id);
+    if (sret != SYS_E_DONE) {
+        printf("Error: couldn't retrieve CANSNIF's task id\n");
+    } else {
+        printf("sees CANSNIF as %d\n", snif_id);
+    }
+
+
+
+   /*
+    * Devices' and ressources' registrations are finished !
+    */
 
     sret = sys_init(INIT_DONE);
     if (sret) {
@@ -421,7 +397,7 @@ int _main(uint32_t my_id)
     printf("init done.\n");
 
     /*
-     * Devices' initialization
+     * Devices' initializations
      */
 
     for (int i = 1; i < 3; i++) {
@@ -450,13 +426,6 @@ int _main(uint32_t my_id)
        }
     }
 
-    sret = usart_init(&usart_config);
-    if (sret) {
-      printf("Error during USART initialization %d\n", sret);
-    } else {
-      printf("USART initialized with success\n");
-    }
-
 
         /*************
          * Main task *
@@ -476,13 +445,17 @@ int _main(uint32_t my_id)
 
         /* Manage button for verbose mode */
         if (button_pressed == true) {
+            button_pressed = false;
             if (verbose == false) {
                 verbose = true;
                 red_state = ON;
+                printf("recording...\n");
             } else {
                 verbose = false;
                 red_state = OFF;
+                printf("silent.\n");
             }
+
             sret = sys_cfg(CFG_GPIO_SET, (uint8_t) leds.gpios[0].kref.val, red_state);
             if (sret != SYS_E_DONE) {
                 printf("sys_cfg(red led): failed\n");
@@ -520,8 +493,7 @@ int _main(uint32_t my_id)
               return 1;
             }
 
-            /* 1. Mirror it to the serial port using the Serial Line CAN
-                  interface (SLCAN) driver syntax. */
+            /* 1. Mirror it to the serial port using the CANSNIF task */
             if (verbose) {
 
               char buffer[10+8*2+5];
@@ -551,8 +523,29 @@ int _main(uint32_t my_id)
               }
               n = n + sprintf(buffer+n, "\r");
 
-              usart_write(usart_config.usart, buffer, n);
+              // d. send through IPC.
+              sret = sys_ipc(IPC_SEND_ASYNC, snif_id, n, buffer);
+              switch (sret) {
+                case SYS_E_DENIED:
+                   printf("is not allowed to communicate with CANSNIF\n");
+                   break;
+                case SYS_E_INVAL:
+                   printf("IPC arguments are invalid\n");
+                   break;
+                case SYS_E_BUSY:
+                   printf("A frame was lost due to CANSNIF task unavailable\n");
+                   /* Consider buffering ...*/
+                   break;
+                case SYS_E_MAX:
+                   printf("Unkown IPC error.\n");
+                   break;
+                case SYS_E_DONE:
+                   /* Everythings fine ...*/
+                   break;
+              }
             }
+
+
 
             /* 2. Forward it to the other CAN bus */
             can_mbox_t *mbox = NULL;
