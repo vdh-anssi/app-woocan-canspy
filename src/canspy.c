@@ -533,7 +533,7 @@ int _main(uint32_t my_id)
                    printf("IPC arguments are invalid\n");
                    break;
                 case SYS_E_BUSY:
-                   printf("A frame was lost due to CANSNIF task unavailable\n");
+                   printf("A frame was lost due to CANSNIF task's unavailability\n");
                    /* Consider buffering ...*/
                    break;
                 case SYS_E_MAX:
@@ -544,7 +544,6 @@ int _main(uint32_t my_id)
                    break;
               }
             }
-
 
 
             /* 2. Forward it to the other CAN bus */
