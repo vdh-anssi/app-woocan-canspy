@@ -540,7 +540,7 @@ int _main(uint32_t my_id)
                    printf("Unkown IPC error.\n");
                    break;
                 case SYS_E_DONE:
-                   /* Everythings fine ...*/
+                   /* Everything's fine ...*/
                    break;
               }
             }
