@@ -230,9 +230,9 @@ void dump_CAN_frame (can_header_t *head, can_data_t *body)
 
   // 1. ID in decimal
   if (head->IDE == CAN_ID_STD) {
-    n = sprintf(buffer, "t@%i", head->id.std);
+    n = sprintf(buffer, "t@%i", head->id);
   } else {
-    n = sprintf(buffer, "T@%i", head->id.ext);
+    n = sprintf(buffer, "T@%i", head->id);
   }
 
   // 2. length
@@ -499,18 +499,18 @@ int _main(uint32_t my_id)
               char buffer[10+8*2+5];
               int n = 0;
 
-              // a. ID in decimal
+              // a. ID in hexadecimal
               if (head.IDE == CAN_ID_STD) {
                 if (head.RTR) {
-                   n = sprintf(buffer, "r%03x", head.id.std);
+                   n = sprintf(buffer, "r%03x", head.id);
                 } else {
-                   n = sprintf(buffer, "t%03x", head.id.std);
+                   n = sprintf(buffer, "t%03x", head.id);
                 }
               } else {
                 if (head.RTR) {
-                   n = sprintf(buffer, "R%08x", head.id.ext);
+                   n = sprintf(buffer, "R%08x", head.id);
                 } else {
-                   n = sprintf(buffer, "T%08x", head.id.ext);
+                   n = sprintf(buffer, "T%08x", head.id);
                 }
               }
 
