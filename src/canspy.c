@@ -508,9 +508,9 @@ int _main(uint32_t my_id)
                 }
               } else {
                 if (head.RTR) {
-                   n = sprintf(buffer, "R%08x", head.id.std);
+                   n = sprintf(buffer, "R%08x", head.id.ext);
                 } else {
-                   n = sprintf(buffer, "T%08x", head.id.std);
+                   n = sprintf(buffer, "T%08x", head.id.ext);
                 }
               }
 
