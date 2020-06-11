@@ -493,9 +493,16 @@ int _main(uint32_t my_id)
               return 1;
             }
 
-            /* 1. Mirror it to the serial port using the CANSNIF task */
-            if (verbose) {
+            /* 1. Apply here your filtering policy.
+             *   a decision is taken for each frame */
+            bool report  = true;
+            bool forward = true;
 
+
+            /* 2. Mirror it to the serial port using the CANSNIF task */
+            if (verbose && report) {
+
+              // SLCAN format:
               char buffer[10+8*2+5];
               int n = 0;
 
@@ -513,17 +520,16 @@ int _main(uint32_t my_id)
                    n = sprintf(buffer, "T%08x", head.id);
                 }
               }
-
               // b. length
               n = n + sprintf(buffer+n, "%01d", head.DLC);
-
               // c. raw data in hexa
               for (int i = 0; i < head.DLC; i++) {
                 n = n + sprintf(buffer+n, "%02x", body.data[i]);
               }
+              // d. terminate with Carriage Return only.
               n = n + sprintf(buffer+n, "\r");
 
-              // d. send through IPC.
+              // e. send through IPC.
               sret = sys_ipc(IPC_SEND_ASYNC, snif_id, n, buffer);
               switch (sret) {
                 case SYS_E_DENIED:
@@ -547,15 +553,17 @@ int _main(uint32_t my_id)
 
 
             /* 2. Forward it to the other CAN bus */
-            can_mbox_t *mbox = NULL;
-            if (port == CAN_PORT_1) {
-              mret = can_xmit(&can2_ctx, &head, &body, mbox);
-            } else {
-              mret = can_xmit(&can1_ctx, &head, &body, mbox);
-            }
-            if (mret) {
-              printf("Error: CAN%d Xmit %d\n", port, mret);
-            }
+            if (forward) {
+               can_mbox_t *mbox = NULL;
+               if (port == CAN_PORT_1) {
+                 mret = can_xmit(&can2_ctx, &head, &body, mbox);
+               } else {
+                 mret = can_xmit(&can1_ctx, &head, &body, mbox);
+               }
+               if (mret) {
+                 printf("Error: CAN%d Xmit %d\n", port, mret);
+               }
+             }
           }
         }
 
