@@ -345,7 +345,7 @@ int _main(uint32_t my_id)
     can1_ctx.autoretrans  = true;     /* auto retransmission ? */
     can1_ctx.rxfifolocked = false;    /* is Rx Fifo locked against overrun ?*/
     can1_ctx.txfifoprio   = true;     /* Tx FIFO respects chronology ? */
-    can1_ctx.bit_rate     = CAN_SPEED_1MHZ;
+    can1_ctx.bit_rate     = CAN_SPEED_1MBit_s;
 
     /* CAN 2 */
     can2_ctx.mode = CAN_MODE_NORMAL;
@@ -356,7 +356,7 @@ int _main(uint32_t my_id)
     can2_ctx.autoretrans  = true;     /* auto retransmission ? */
     can2_ctx.rxfifolocked = false;    /* is Rx Fifo locked against overrun ?*/
     can2_ctx.txfifoprio   = true;     /* Tx FIFO respects chronology ? */
-    can2_ctx.bit_rate     = CAN_SPEED_1MHZ;
+    can2_ctx.bit_rate     = CAN_SPEED_1MBit_s;
 
     for (int i = 1; i < 3; i++) {
        if (i == 1) {
@@ -483,8 +483,8 @@ int _main(uint32_t my_id)
 
         /* if there is a frame to collect, let's do it */
         for (can_port_t port = CAN_PORT_1; port < CAN_PORT_3; port++ ) {
-          if (retrieve_available_can_frame(port, &head, &body) == true) {
-
+          bool new_frame = retrieve_available_can_frame(port, &head, &body);
+          if (new_frame) {
             /* signal traffic */
             green_state = ON;
             sret = sys_cfg(CFG_GPIO_SET, (uint8_t) leds.gpios[1].kref.val, green_state);
@@ -554,14 +554,14 @@ int _main(uint32_t my_id)
 
             /* 2. Forward it to the other CAN bus */
             if (forward) {
-               can_mbox_t *mbox = NULL;
+               can_mbox_t mbox = CAN_MBOX_0;
                if (port == CAN_PORT_1) {
-                 mret = can_xmit(&can2_ctx, &head, &body, mbox);
+                 mret = can_xmit(&can2_ctx, &head, &body, &mbox);
                } else {
-                 mret = can_xmit(&can1_ctx, &head, &body, mbox);
+                 mret = can_xmit(&can1_ctx, &head, &body, &mbox);
                }
                if (mret) {
-                 printf("Error: CAN%d Xmit %d\n", port, mret);
+                 printf("Error: CAN%d Xmit %d\n", port, mbederror(mret));
                }
              }
           }
