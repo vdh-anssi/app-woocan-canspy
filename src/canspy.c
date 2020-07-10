@@ -168,7 +168,7 @@ volatile can_error_t can_error_code;        /* set by ISR */
 volatile uint32_t nb_IT      = 0;           /* set by ISR */
 volatile bool emit_aborted   = false;       /* set by ISR */
 volatile bool error_occurred = false;       /* set by ISR */
-volatile bool lost_frame     = false;       /* set by ISR */
+volatile bool lost_frames    = false;       /* set by ISR */
 volatile can_fifo_t fifo     = CAN_FIFO_0;  /* set by ISR */
 volatile uint32_t events[13] = { 0 };       /* set by ISR */
 
@@ -201,9 +201,9 @@ void can_event(can_event_t event, can_port_t port, can_error_t errcode)
           buffer_can_frame(port, CAN_FIFO_1);
           err = buffer_can_frame(port, CAN_FIFO_1);
           break;
-      case CAN_EVENT_TX_MBOX0_ABORT:
-      case CAN_EVENT_TX_MBOX1_ABORT:
-      case CAN_EVENT_TX_MBOX2_ABORT:
+      case CAN_EVENT_TX_FAILED_MBOX0:
+      case CAN_EVENT_TX_FAILED_MBOX1:
+      case CAN_EVENT_TX_FAILED_MBOX2:
           emit_aborted = true;
           can_error_code = errcode;
           break;
@@ -215,7 +215,7 @@ void can_event(can_event_t event, can_port_t port, can_error_t errcode)
           break;
     }
     if (err == MBED_ERROR_NOSTORAGE) {
-      lost_frame = true;
+      lost_frames = true;
     }
 }
 
@@ -476,8 +476,8 @@ int _main(uint32_t my_id)
         }
 
         /* If frames where lost in buffering, signal it */
-        if (lost_frame) {
-          lost_frame = false;
+        if (lost_frames) {
+          lost_frames = false;
           printf("At least one frame was lost due to CANSPY's buffer overrun\n");
         }
 
