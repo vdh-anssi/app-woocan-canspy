@@ -340,7 +340,7 @@ int _main(uint32_t my_id)
     can1_ctx.mode = CAN_MODE_NORMAL;
     can1_ctx.access = CAN_ACCESS_IT;
     can1_ctx.timetrigger  = false;    /* Time triggered communication mode */
-    can1_ctx.autobusoff   = false;    /* automatic bus-off ? */
+    can1_ctx.autobusoff   = true;     /* automatically recover from Bus-Off ? */
     can1_ctx.autowakeup   = true;     /* wake up from sleep on event ? */
     can1_ctx.autoretrans  = true;     /* auto retransmission ? */
     can1_ctx.rxfifolocked = false;    /* is Rx Fifo locked against overrun ?*/
@@ -351,7 +351,7 @@ int _main(uint32_t my_id)
     can2_ctx.mode = CAN_MODE_NORMAL;
     can2_ctx.access = CAN_ACCESS_IT;
     can2_ctx.timetrigger  = false;    /* Time triggered communication mode */
-    can2_ctx.autobusoff   = false;    /* automatic bus-off ? */
+    can2_ctx.autobusoff   = true;     /* automatically recover from Bus-Off ? */
     can2_ctx.autowakeup   = true;     /* wake up from sleep on event ? */
     can2_ctx.autoretrans  = true;     /* auto retransmission ? */
     can2_ctx.rxfifolocked = false;    /* is Rx Fifo locked against overrun ?*/
