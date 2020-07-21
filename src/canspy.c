@@ -162,12 +162,16 @@ void exti_button_handler ()
 /*
  * Interruption Routine : this is called by the CAN ISR routine
  */
+
+volatile can_error_t can1_error_code,
+                     can2_error_code;       /* set by ISR */
+volatile bool can1_error_occurred = false;  /* set by ISR */
+volatile bool can2_error_occurred = false;  /* set by ISR */
+
 volatile can_port_t port_id  = CAN_PORT_1;  /* set by ISR */
 volatile can_event_t last_event;            /* set by ISR */
-volatile can_error_t can_error_code;        /* set by ISR */
 volatile uint32_t nb_IT      = 0;           /* set by ISR */
 volatile bool emit_aborted   = false;       /* set by ISR */
-volatile bool error_occurred = false;       /* set by ISR */
 volatile bool lost_frames    = false;       /* set by ISR */
 volatile can_fifo_t fifo     = CAN_FIFO_0;  /* set by ISR */
 volatile uint32_t events[13] = { 0 };       /* set by ISR */
@@ -178,9 +182,6 @@ void can_event(can_event_t event, can_port_t port, can_error_t errcode)
     port_id    = port;
     nb_IT++;
     events[event]++;
-
-   emit_aborted   = false;
-   error_occurred = false;
 
    mbed_error_t err  = MBED_ERROR_NONE;
 
@@ -205,11 +206,22 @@ void can_event(can_event_t event, can_port_t port, can_error_t errcode)
       case CAN_EVENT_TX_FAILED_MBOX1:
       case CAN_EVENT_TX_FAILED_MBOX2:
           emit_aborted = true;
-          can_error_code = errcode;
+          if (port == CAN_PORT_1) {
+            can1_error_occurred = true;
+            can1_error_code = errcode;
+          } else {
+            can2_error_occurred = true;
+            can2_error_code = errcode;
+          }
           break;
       case CAN_EVENT_ERROR:
-          error_occurred = true;
-          can_error_code = errcode;
+          if (port == CAN_PORT_1) {
+            can1_error_occurred = true;
+            can1_error_code = errcode;
+          } else {
+            can2_error_occurred = true;
+            can2_error_code = errcode;
+          }
           break;
       default:
           break;
@@ -466,13 +478,17 @@ int _main(uint32_t my_id)
         /* if there is an error on the CAN bus, signal it */
         if (emit_aborted) {
           emit_aborted = false;
+          printf("CAN event : emit aborted");
+        }
+        if (can1_error_occurred) {
+          can1_error_occurred = false;
           verbose = false;
-          printf("CAN event, emit aborted: %d ! \n", can_error_code);
-        } else
-        if (error_occurred) {
-          error_occurred = false;
+          printf("CAN1 event, error: %d\n", can1_error_code);
+        }
+        if (can2_error_occurred) {
+          can2_error_occurred = false;
           verbose = false;
-          printf("CAN event, error: %d\n", can_error_code);
+          printf("CAN2 event, error: %d\n", can2_error_code);
         }
 
         /* If frames where lost in buffering, signal it */
