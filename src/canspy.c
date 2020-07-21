@@ -483,12 +483,12 @@ int _main(uint32_t my_id)
         if (can1_error_occurred) {
           can1_error_occurred = false;
           verbose = false;
-          printf("CAN1 event, error: %d\n", can1_error_code);
+          printf("CAN1 event, error flags : 0x%x\n", can1_error_code);
         }
         if (can2_error_occurred) {
           can2_error_occurred = false;
           verbose = false;
-          printf("CAN2 event, error: %d\n", can2_error_code);
+          printf("CAN2 event, error flags: 0x%x\n", can2_error_code);
         }
 
         /* If frames where lost in buffering, signal it */
