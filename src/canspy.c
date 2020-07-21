@@ -478,17 +478,17 @@ int _main(uint32_t my_id)
         /* if there is an error on the CAN bus, signal it */
         if (emit_aborted) {
           emit_aborted = false;
-          printf("CAN event : emit aborted");
+          printf("CAN event: emit aborted");
         }
         if (can1_error_occurred) {
           can1_error_occurred = false;
           verbose = false;
-          printf("CAN1 event, error flags : 0x%x\n", can1_error_code);
+          printf("CAN1 event: error, flags: 0x%x\n", can1_error_code);
         }
         if (can2_error_occurred) {
           can2_error_occurred = false;
           verbose = false;
-          printf("CAN2 event, error flags: 0x%x\n", can2_error_code);
+          printf("CAN2 event: error, flags: 0x%x\n", can2_error_code);
         }
 
         /* If frames where lost in buffering, signal it */
