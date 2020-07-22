@@ -357,7 +357,7 @@ int _main(uint32_t my_id)
     can1_ctx.autoretrans  = true;     /* auto retransmission ? */
     can1_ctx.rxfifolocked = false;    /* is Rx Fifo locked against overrun ?*/
     can1_ctx.txfifoprio   = true;     /* Tx FIFO respects chronology ? */
-    can1_ctx.bit_rate     = CAN_SPEED_1MBit_s;
+    can1_ctx.bit_rate     = CAN_SPEED_250kBit_s;
 
     /* CAN 2 */
     can2_ctx.mode = CAN_MODE_NORMAL;
@@ -368,7 +368,7 @@ int _main(uint32_t my_id)
     can2_ctx.autoretrans  = true;     /* auto retransmission ? */
     can2_ctx.rxfifolocked = false;    /* is Rx Fifo locked against overrun ?*/
     can2_ctx.txfifoprio   = true;     /* Tx FIFO respects chronology ? */
-    can2_ctx.bit_rate     = CAN_SPEED_1MBit_s;
+    can2_ctx.bit_rate     = CAN_SPEED_250kBit_s;
 
     for (int i = 1; i < 3; i++) {
        if (i == 1) {
