@@ -538,8 +538,9 @@ int _main(uint32_t my_id)
               }
               // b. length
               n = n + sprintf(buffer+n, "%01d", head.DLC);
+
               // c. raw data in hexa
-              for (int i = 0; i < head.DLC; i++) {
+              if (head.RTR == false) for (int i = 0; i < head.DLC; i++) {
                 n = n + sprintf(buffer+n, "%02x", body.data[i]);
               }
               // d. terminate with Carriage Return only.
@@ -572,12 +573,12 @@ int _main(uint32_t my_id)
             if (forward) {
                can_mbox_t mbox = CAN_MBOX_0;
                if (port == CAN_PORT_1) {
-                 mret = can_xmit(&can2_ctx, &head, &body, &mbox);
+                 mret = can_emit(&can2_ctx, &head, &body, &mbox);
                } else {
-                 mret = can_xmit(&can1_ctx, &head, &body, &mbox);
+                 mret = can_emit(&can1_ctx, &head, &body, &mbox);
                }
                if (mret) {
-                 printf("Error: CAN%d Xmit %d\n", port, mbederror(mret));
+                 printf("Error: CAN%d emit %d\n", port, mbederror(mret));
                }
              }
           }
