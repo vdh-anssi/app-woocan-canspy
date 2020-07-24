@@ -170,20 +170,16 @@ volatile bool can2_error_occurred = false;  /* set by ISR */
 
 volatile can_port_t port_id  = CAN_PORT_1;  /* set by ISR */
 volatile can_event_t last_event;            /* set by ISR */
-volatile uint32_t nb_IT      = 0;           /* set by ISR */
 volatile bool emit_aborted   = false;       /* set by ISR */
 volatile bool lost_frames    = false;       /* set by ISR */
 volatile can_fifo_t fifo     = CAN_FIFO_0;  /* set by ISR */
-volatile uint32_t events[13] = { 0 };       /* set by ISR */
 
 void can_event(can_event_t event, can_port_t port, can_error_t errcode)
 {
     last_event = event;
     port_id    = port;
-    nb_IT++;
-    events[event]++;
-
-   mbed_error_t err  = MBED_ERROR_NONE;
+    
+    mbed_error_t err  = MBED_ERROR_NONE;
 
     switch (event) {
       case CAN_EVENT_RX_FIFO0_MSG_PENDING:
