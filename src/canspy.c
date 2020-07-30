@@ -70,12 +70,12 @@ void inc_mod (unsigned char *index) {
 
 mbed_error_t buffer_can_frame(can_port_t port, can_fifo_t fifo) {
   mbed_error_t errcode = MBED_ERROR_NONE;
-  can_error_t  mret;
+  mbed_error_t  mret;
   switch (port) {
     case CAN_PORT_1:
       mret = can_receive(&can1_ctx, fifo, &can1_rx_buffer[can1_rx_in].head,
                                           &can1_rx_buffer[can1_rx_in].body);
-      if (mret == CAN_ERROR_NONE) {
+      if (mret == MBED_ERROR_NONE) {
         inc_mod(&can1_rx_in);
         if (can1_rx_in == can1_rx_out) {
           // Oups the buffer is full ! We drop one entry.
@@ -89,7 +89,7 @@ mbed_error_t buffer_can_frame(can_port_t port, can_fifo_t fifo) {
     case CAN_PORT_2:
       mret = can_receive(&can2_ctx, fifo, &can2_rx_buffer[can2_rx_in].head,
                                           &can2_rx_buffer[can2_rx_in].body);
-      if (mret == CAN_ERROR_NONE) {
+      if (mret == MBED_ERROR_NONE) {
         inc_mod(&can2_rx_in);
         if (can2_rx_in == can2_rx_out) {
           inc_mod(&can2_rx_out);
@@ -178,7 +178,7 @@ void can_event(can_event_t event, can_port_t port, can_error_t errcode)
 {
     last_event = event;
     port_id    = port;
-    
+
     mbed_error_t err  = MBED_ERROR_NONE;
 
     switch (event) {
@@ -198,9 +198,12 @@ void can_event(can_event_t event, can_port_t port, can_error_t errcode)
           buffer_can_frame(port, CAN_FIFO_1);
           err = buffer_can_frame(port, CAN_FIFO_1);
           break;
-      case CAN_EVENT_TX_FAILED_MBOX0:
-      case CAN_EVENT_TX_FAILED_MBOX1:
-      case CAN_EVENT_TX_FAILED_MBOX2:
+      case CAN_EVENT_TX_MBOX0_ARBITRATION_LOST:
+      case CAN_EVENT_TX_MBOX1_ARBITRATION_LOST:
+      case CAN_EVENT_TX_MBOX2_ARBITRATION_LOST:
+      case CAN_EVENT_TX_MBOX0_TRANSMISSION_ERR:
+      case CAN_EVENT_TX_MBOX1_TRANSMISSION_ERR:
+      case CAN_EVENT_TX_MBOX2_TRANSMISSION_ERR:
           emit_aborted = true;
           if (port == CAN_PORT_1) {
             can1_error_occurred = true;
@@ -211,6 +214,11 @@ void can_event(can_event_t event, can_port_t port, can_error_t errcode)
           }
           break;
       case CAN_EVENT_ERROR:
+      case CAN_EVENT_ERROR_RX_WARNING:
+      case CAN_EVENT_ERROR_TX_WARNING:
+      case CAN_EVENT_ERROR_RX_PASSIVE_STATE:
+      case CAN_EVENT_ERROR_TX_PASSIVE_STATE:
+      case CAN_EVENT_ERROR_BUS_OFF_STATE:
           if (port == CAN_PORT_1) {
             can1_error_occurred = true;
             can1_error_code = errcode;
@@ -354,7 +362,6 @@ int _main(uint32_t my_id)
     can1_ctx.rxfifolocked = false;    /* is Rx Fifo locked against overrun ?*/
     can1_ctx.txfifoprio   = true;     /* Tx FIFO respects chronology ? */
     can1_ctx.bit_rate     = CAN_SPEED_250kBit_s;
-    can1_ctx.err_policy   = CAN_POLICY_FLAGS;
 
     /* CAN 2 */
     can2_ctx.mode = CAN_MODE_NORMAL;
@@ -366,7 +373,6 @@ int _main(uint32_t my_id)
     can2_ctx.rxfifolocked = false;    /* is Rx Fifo locked against overrun ?*/
     can2_ctx.txfifoprio   = true;     /* Tx FIFO respects chronology ? */
     can2_ctx.bit_rate     = CAN_SPEED_250kBit_s;
-    can1_ctx.err_policy   = CAN_POLICY_FLAGS;
 
     for (int i = 1; i < 3; i++) {
        if (i == 1) {
