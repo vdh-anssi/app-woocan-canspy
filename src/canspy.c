@@ -582,7 +582,7 @@ int _main(uint32_t my_id)
                  mret = can_emit(&can1_ctx, &head, &body, &mbox);
                }
                if (mret) {
-                 printf("Error: CAN%d emit %s\n", port, mbederror(mret));
+                 printf("Error: (emit) CAN%d %s\n", port, mbederror(mret));
                }
              }
           }
