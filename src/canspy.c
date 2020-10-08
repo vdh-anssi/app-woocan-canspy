@@ -349,8 +349,8 @@ int _main(uint32_t my_id)
     /* Zeroing the structure to avoid improper values detected by the kernel */
     memset(&can1_ctx, 0, sizeof(can_context_t));
     memset(&can2_ctx, 0, sizeof(can_context_t));
-    can1_ctx.id = CAN_PORT_1;
-    can2_ctx.id = CAN_PORT_2;
+    can1_ctx.port = CAN_PORT_1;
+    can2_ctx.port = CAN_PORT_2;
 
     /* CAN 1 */
     can1_ctx.mode = CAN_MODE_NORMAL;
